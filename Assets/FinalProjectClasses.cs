@@ -23,6 +23,15 @@ namespace RiskRecreation
         Artillery
     }
 
+    public enum States
+    {
+        Initial,
+        Strengthening,
+        Attack,
+        Fortification
+
+    }
+
     public class Country
     {
         private PlayerSlot player;
@@ -283,10 +292,58 @@ namespace RiskRecreation
                 }
             }
         }
+
+        // Initial Stage Stuff
+        public Country GetRandomCountry()
+        {
+            int countryNumber = Random.Range(0, countries.Count - 1);
+            return countries[countryNumber];
+        }
+
+        public bool CheckForUnoccupiedCountries() // To avoid infinite loop 
+        {
+            foreach(Country country in countries)
+            {
+                if(country.GetPlayer() == PlayerSlot.Unoccupied)
+                {
+                    return true;
+                }
+            }
+            Debug.Log("No Unoccupied Countries!");
+            return false;
+        }
+
+        public Country GetStartingCountry()
+        {
+            Country startingCountry = GetRandomCountry();
+            if (CheckForUnoccupiedCountries())
+            {
+                while (startingCountry.GetPlayer() != PlayerSlot.Unoccupied)
+                {
+                    startingCountry = GetRandomCountry();
+                }
+            }
+            return startingCountry;
+        }
+
+        //Reinforcing Stage Stuff
+        public int GetControlledContinents (Player player)
+        {
+            int controlledContinents = 0;
+            foreach(Continent continent in continents)
+            {
+                if(continent.GetPlayer() == player.GetPlayerSlot())
+                {
+                    controlledContinents++;
+                }
+            }
+            return controlledContinents;
+        }
     }
 
     public class Player
     {
+        private PlayerSlot playerSlot;
         private List<Country> countries;
         private int armies; // Should be 0 at the end of a turn
         private int exchangeCounter; //Should be 0 at the start of every turn
@@ -294,7 +351,7 @@ namespace RiskRecreation
         private int ArtilleryCards;
         private int CavalryCards;
 
-        public Player(List<Country> countries)
+        public Player(List<Country> countries, int playerSlot)
         {
             this.countries = countries;
             armies = 0;
@@ -302,16 +359,43 @@ namespace RiskRecreation
             InfantryCards = 0;
             ArtilleryCards = 0;
             CavalryCards = 0;
+            this.playerSlot = SetPlayerSlot(playerSlot);
         }
 
+        public PlayerSlot GetPlayerSlot()
+        {
+            return playerSlot;
+        }
+
+        public PlayerSlot SetPlayerSlot(int slot)
+        {
+            switch(slot)
+            {
+                case 0:return PlayerSlot.Player1;
+                case 1: return PlayerSlot.Player2;
+                case 2: return PlayerSlot.Player3;
+                case 3: return PlayerSlot.Player4;
+                default: 
+                    Debug.Log("Player lot not in range"); 
+                    return PlayerSlot.Unoccupied;
+            }
+        }
+
+        // Country Methods;
         public void AddCountry(Country country)
         {
-            countries.Add(country); 
+            countries.Add(country);
+            country.SetPlayer(playerSlot);
         }
 
         public void RemoveCountry(Country country)
         {
             countries.Remove(country);
+        }
+
+        public int GetCountryCount()
+        {
+            return countries.Count;
         }
 
         // Armies, not all functions necessary but do exactly as they are supposed to
@@ -350,22 +434,31 @@ namespace RiskRecreation
         }
 
         //Use cards to get armies
-        public void UseCards(Card card)
+        public void ExchangeCards(Card card) // Will take 3 from the card type so check the amount of cards before running this method!!
         {
             switch (card)
             {
                 case Card.Infantry:
                     InfantryCards -= 3;
+                    armies += 5 * exchangeCounter;
+                    exchangeCounter++;
                     break;
                 case Card.Cavalry:
                     CavalryCards -= 3;
+                    armies += 5 * exchangeCounter;
+                    exchangeCounter++;
                     break;
                 case Card.Artillery:
                     ArtilleryCards -= 3;
+                    armies += 5 * exchangeCounter;
+                    exchangeCounter++;
+                    break;
+                default:
+                    Debug.Log("Invalid card type.");
                     break;
             }
 
-            armies += 5 * exchangeCounter; // 5 extra for each subsequent exchange
+            
         }
 
         public List<Card> Cards()
@@ -376,6 +469,11 @@ namespace RiskRecreation
             for (int i = 0; i < CavalryCards; i++) cards.Add(Card.Cavalry);
 
             return cards;
+        }
+
+        public Vector3 CardsAsVector()
+        {
+            return new Vector3(InfantryCards, ArtilleryCards, CavalryCards);
         }
 
         public void AddCard(Card card)
@@ -394,9 +492,142 @@ namespace RiskRecreation
             }
         }
 
+        public void RemoveCard(Card card)
+        {
+            switch (card)
+            {
+                case Card.Infantry:
+                    InfantryCards--;
+                    break;
+                case Card.Cavalry:
+                    CavalryCards--;
+                    break;
+                case Card.Artillery:
+                    ArtilleryCards--;
+                    break;
+            }
+        }
+
+        public void AddTroopsToCountry(Country country, int troops)
+        {
+            if (countries.Contains(country))
+            {
+                country.AddArmies(troops);
+                armies -= troops;
+            }
+            else
+            {
+                Debug.Log("This country does not belong to the player");
+            }
+        }
+
         public void ResetExchangeCounter()
         {
             exchangeCounter = 0;
+        }
+    }
+
+    public class StageManager
+    {
+        List<Player> playerList;
+        Player currentTurnPlayer;
+        Map map;
+
+        public StageManager(int numberOfPlayers, Map map) // Initial Stage
+        {
+            this.map = map;
+            if(numberOfPlayers > 4 || numberOfPlayers < 1) // NUMBER OF PLAYERS SHOULD NOT EXCEED 4
+            {
+                Debug.Log("INVALID VALUES");
+            }
+            else
+            {
+                playerList = new List<Player>(); // Initialize player list
+                for (int i = 0; i < numberOfPlayers; i++)
+                {
+                    // Make list of countries for player and add starting country
+                    List<Country> newPlayerCountryList = new List<Country>();
+                    newPlayerCountryList.Add(map.GetStartingCountry());
+                    // Add player to list
+                    Player player = new Player(newPlayerCountryList, i);
+                    playerList.Add(player);
+                }
+                currentTurnPlayer = playerList[0]; //Set the turn to player 1
+            }
+        }
+
+        public void ReinforcingStageStart()
+        {
+            // Give player initial armies for turn
+            int armiesFromCountry; // countries /3 rounded down
+            armiesFromCountry = currentTurnPlayer.GetCountryCount();
+            armiesFromCountry = (int)Mathf.Floor(armiesFromCountry / 3);
+
+            int armiesFromContinent = map.GetControlledContinents(currentTurnPlayer); // controlled continents
+            
+            int initialArmies = armiesFromCountry + armiesFromContinent; // Total
+
+            if (initialArmies == 0) initialArmies = 1; // if 0 make 1
+
+            currentTurnPlayer.SetArmies(initialArmies);
+        }
+
+        public void ReinforcingStageExchangeCards()
+        {
+            currentTurnPlayer.ResetExchangeCounter();
+            Vector3 playerCards = currentTurnPlayer.CardsAsVector();
+            while(playerCards.x >= 3)
+            {
+                currentTurnPlayer.ExchangeCards(Card.Infantry);
+            }
+            while(playerCards.y >= 3)
+            {
+                currentTurnPlayer.ExchangeCards(Card.Artillery);
+            }
+            while(playerCards.z >= 3)
+            {
+                currentTurnPlayer.ExchangeCards(Card.Cavalry);
+            }
+        }
+
+        public void ReinforcingStageReinforceArmies(Country country, int amount)
+        {
+            currentTurnPlayer.AddTroopsToCountry(country, amount); 
+        }
+
+        public void AttackingStageAttack(Country attacker, Country target)
+        {
+            while(attacker.Armies() <= 0 || target.Armies() <= 0)
+            {
+                int attackerRoll = Random.Range(1, 7) + Random.Range(1, 7) + Random.Range(1, 7);
+                int targetRoll = Random.Range(1, 7) + Random.Range(1, 7) + Random.Range(1, 7);
+                if(attackerRoll > targetRoll)
+                {
+                    target.SubtractArmies(1);
+                }
+                if (attackerRoll < targetRoll)
+                {
+                    attacker.SubtractArmies(1);
+                }
+            }
+            if (target.Armies() == 0) target.SetPlayer(currentTurnPlayer.GetPlayerSlot());
+        }
+
+        public void FortifyingStage(Country countryDonor, Country countryReciever, int fortificationAmount) // Need to run checks before
+        {
+            countryDonor.SubtractArmies(fortificationAmount);
+            countryReciever.AddArmies(fortificationAmount);
+        }
+
+        public void ProgressTurns()
+        {
+            int index = playerList.IndexOf(currentTurnPlayer);
+            index++;
+            if (index == playerList.Count)
+            {
+                index = 0;
+            }
+            currentTurnPlayer = playerList[index];
         }
     }
 }
