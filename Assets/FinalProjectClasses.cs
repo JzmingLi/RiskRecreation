@@ -62,6 +62,7 @@ namespace RiskRecreation
             player = PlayerSlot.Unoccupied;
             _countryName = name;
             armies = 0;
+            connectedCountries = new List<Country>();
             this.continent = continent;
             _position = position;
             _sprite = sprite;
@@ -77,10 +78,12 @@ namespace RiskRecreation
             _sprite = sprite;
         }
 
+        /* Don't think this method is necessary
         public Country()
         {
             connectedCountries = new List<Country>();
         }
+        */
 
         // Managing Connections
         public void AddConnection(Country connection)
@@ -176,12 +179,21 @@ namespace RiskRecreation
             get { return _sprite; }
         }
 
-        public Continent(string name, int controlValue, List<Country> countries, GameObject sprite)
+        public Continent(string name, int controlValue, List<Country> countries, GameObject sprite) // Instantiate with countries
         {
             _continentName = name;
             _controlValue = controlValue;
             controllingPlayer = PlayerSlot.Unoccupied;
             this.countries = countries;
+            _sprite = sprite;
+        }
+
+        public Continent(string name, int controlValue, GameObject sprite) // Empty continent
+        {
+            _continentName = name;
+            _controlValue = controlValue;
+            controllingPlayer = PlayerSlot.Unoccupied;
+            countries = new List<Country>();
             _sprite = sprite;
         }
 
@@ -235,6 +247,16 @@ namespace RiskRecreation
         {
             this.countries = countries;
             this.continents = continents;
+
+            foreach(Country country in countries)
+            {
+                Debug.Log(country.Sprite);
+                countrySprites.Add(country.Sprite);
+            }
+            foreach(Continent continent in continents)
+            {
+                continentSprites.Add(continent.Sprite);
+            }
         }
 
         private Dictionary<PlayerSlot, Color> PlayerColors = new Dictionary<PlayerSlot, Color>(); // Determine player colours
@@ -248,7 +270,8 @@ namespace RiskRecreation
             PlayerColors.Add(PlayerSlot.Unoccupied, unoccupied);
         }
 
-        // Instantiate all visuals and game objects
+        // Instantiate all visuals and game objects (POSSILY REDUNDANT SO COMMENTED OUT FOR NOW)
+        /**
         public void DrawMap()
         {
             foreach(Continent continent in continents)
@@ -262,6 +285,7 @@ namespace RiskRecreation
                 countrySprites.Add(Object.Instantiate(country.Sprite, positionIn3D, Quaternion.identity));
             }
         }
+        **/
 
         // Update Army Counters and Colors
         public void UpdateCountryLabels()
@@ -595,22 +619,37 @@ namespace RiskRecreation
             currentTurnPlayer.AddTroopsToCountry(country, amount); 
         }
 
-        public void AttackingStageAttack(Country attacker, Country target)
+        public int AttackingStageAttack(Country attacker, Country target, int dice)
         {
+            int diceUsed = 0;
             while(attacker.Armies() <= 0 || target.Armies() <= 0)
             {
-                int attackerRoll = Random.Range(1, 7) + Random.Range(1, 7) + Random.Range(1, 7);
-                int targetRoll = Random.Range(1, 7) + Random.Range(1, 7) + Random.Range(1, 7);
-                if(attackerRoll > targetRoll)
+                diceUsed = 0;
+                int attackerRoll = 0;
+                for (int i = 0; i < 3; i++) // Roll up to 3 dice for every army
+                {
+                    if (i < attacker.Armies()) break;
+                    attackerRoll += Random.Range(1, 7);
+                    diceUsed += 1;
+                }
+                int targetRoll = 0;
+                for(int i = 0; i < 2; i++) // Roll up to 2 dice for every army
+                {
+                    if (i < target.Armies()) break;
+                    targetRoll += Random.Range(1, 7);
+                }
+                if(attackerRoll > targetRoll) // If attacker rolls higher target loses one army
                 {
                     target.SubtractArmies(1);
                 }
-                if (attackerRoll < targetRoll)
+                if (attackerRoll <= targetRoll) // If attacker rolls less or equal to target they lose one army
                 {
                     attacker.SubtractArmies(1);
                 }
             }
             if (target.Armies() == 0) target.SetPlayer(currentTurnPlayer.GetPlayerSlot());
+
+            return diceUsed; // To determine the minimum amount of armies the player must deploy
         }
 
         public void FortifyingStage(Country countryDonor, Country countryReciever, int fortificationAmount) // Need to run checks before
@@ -623,7 +662,7 @@ namespace RiskRecreation
         {
             int index = playerList.IndexOf(currentTurnPlayer);
             index++;
-            if (index == playerList.Count)
+            if (index == playerList.Count) // Loop back to the beginning after the last player
             {
                 index = 0;
             }
