@@ -14,6 +14,7 @@ public class ReinforcingStageHUD : MonoBehaviour
     public TextMeshPro infantry;
     public TextMeshPro artillery;
     public TextMeshPro cavalry;
+    public TextMeshPro messageBox;
     
     
     public void UpdateVisuals(PlayerSlot slot, Vector3 cards, int reinforcements, Color color)

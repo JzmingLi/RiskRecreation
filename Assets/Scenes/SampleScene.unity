@@ -3991,6 +3991,12 @@ MonoBehaviour:
   attackerChosen: 0
   defenderChosen: 0
   attacking: 0
+  incrementUp: 0
+  incrementDown: 0
+  fortified: 0
+  valuePicker: {fileID: 8840606282507537509, guid: 07b76fea4249c5a438d5e3e1170f7016, type: 3}
+  skipAndFortify: 0
+  fortifyButton: {fileID: 7390538316757237070, guid: 4d944a7d867ebd545930e7a86e4c3852, type: 3}
 --- !u!1 &1187031007
 GameObject:
   m_ObjectHideFlags: 0

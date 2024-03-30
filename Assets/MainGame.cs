@@ -6,6 +6,7 @@ using JetBrains.Annotations;
 using System;
 using TMPro;
 using static UnityEditor.Experimental.AssetDatabaseExperimental.AssetDatabaseCounters;
+using System.Reflection;
 
 public class MainGame : MonoBehaviour
 {
@@ -19,13 +20,19 @@ public class MainGame : MonoBehaviour
     public Country reinforceCountry;
     public bool reinforced;
     public bool exchanged;
-    public GameObject attackerButton;
+    public GameObject attackerButton; //reused for fortification stage
     public GameObject targetButton;
     public Country attackingCountry;
     public Country defendingCountry;
-    public bool attackerChosen;
+    public bool attackerChosen; //reused for fortification stage
     public bool defenderChosen;
     public bool attacking;
+    public bool incrementUp;
+    public bool incrementDown;
+    public bool fortified;
+    public GameObject valuePicker;
+    public bool skipAndFortify;
+    public GameObject fortifyButton;
 
 
     void DestroyAllChildren(GameObject target)
@@ -54,6 +61,7 @@ public class MainGame : MonoBehaviour
             case "Lumina":
                 country.MakeConnection(FindCountry(countryList, "Celestia"));
                 country.MakeConnection(FindCountry(countryList, "Terranova"));
+                country.MakeConnection(FindCountry(countryList, "Verdantia"));
                 break;
             case "Celestia":
                 country.MakeConnection(FindCountry(countryList, "Terranova"));
@@ -61,6 +69,7 @@ public class MainGame : MonoBehaviour
                 break;
             case "Terranova":
                 country.MakeConnection(FindCountry(countryList, "Sylvaria"));
+                country.MakeConnection(FindCountry(countryList, "Verdantia"));
                 break;
             case "Sylvaria":
                 country.MakeConnection(FindCountry(countryList, "Mythos"));
@@ -243,122 +252,334 @@ public class MainGame : MonoBehaviour
         DestroyAllChildren(SelectPlayers);
 
         // Create stagemanager
-        StageManager stageManager = new StageManager(4, gameMap);
+        StageManager stageManager = new StageManager(playerCount, gameMap);
         gameMap.UpdateCountryLabels();
         gameMap.ShowContinentPlayerControl();
 
-        //Reinforcing Stage 
-        stageManager.ReinforcingStageStart();
-        ReinforcingStageHUD reinHUD = Instantiate(reinforcingStageHUD).GetComponent<ReinforcingStageHUD>();
-        Player currentPlayer = stageManager.currentTurnPlayer;
-        reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
-
-        List<Country> playerCountries = currentPlayer.countries;
-        List<GameObject> buttons = new List<GameObject>();
-        foreach (Country country in playerCountries) //spawn buttons
+        while (stageManager.CheckPlayersAlive())
         {
-            GameObject button = Instantiate(reinforceButton, country.Sprite.transform);
-            button.GetComponent<ReinforceButton>().country = country;
-            buttons.Add(button);
-            Debug.Log(country);
-        }
+            stageManager.FixPlayerCountryList(gameMap);
+            if (stageManager.CheckPlayerStatus())
+            {
+                
+                //Reinforcing Stage 
+                stageManager.ReinforcingStageStart();
+                ReinforcingStageHUD reinHUD = Instantiate(reinforcingStageHUD).GetComponent<ReinforcingStageHUD>();
+                reinHUD.messageBox.text = "";
+                Player currentPlayer = stageManager.currentTurnPlayer;
+                reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
 
-        reinforcements = currentPlayer.armies;
-        while(reinforcements > 0)
-        {
-            while (!reinforced && !exchanged)
-            {
-                yield return null;
-            }
-            if (reinforced)
-            {
-                currentPlayer.AddTroopsToCountry(reinforceCountry, 1);
-                gameMap.UpdateCountryLabels();
-            }
-            if (exchanged) //Quick exchange incase running out of time
-            {
-                /**
-                for(int i = 0; i < 100; i++)
+                List<Country> playerCountries = currentPlayer.countries;
+                List<GameObject> buttons = new List<GameObject>();
+                foreach (Country country in playerCountries) //spawn buttons
                 {
-                    currentPlayer.AddCard(Card.Artillery);
+                    GameObject button = Instantiate(reinforceButton, country.Sprite.transform);
+                    button.GetComponent<ReinforceButton>().country = country;
+                    buttons.Add(button);
+                    Debug.Log(country.Name + country.GetPlayer());
                 }
-                **/
-                //Testing^
-                stageManager.ReinforcingStageExchangeCards();
+
+                reinforcements = currentPlayer.armies;
+                stageManager.CheckCards();
+                while (reinforcements > 0)
+                {
+                    while (!reinforced && !exchanged)
+                    {
+                        yield return null;
+                    }
+                    if (reinforced)
+                    {
+                        currentPlayer.AddTroopsToCountry(reinforceCountry, 1);
+                        gameMap.UpdateCountryLabels();
+                        reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
+                    }
+                    if (exchanged) //Quick exchange incase running out of time
+                    {
+                        /**
+                        for(int i = 0; i < 100; i++)
+                        {
+                            currentPlayer.AddCard(Card.Artillery);
+                        }
+                        **/
+                        //Testing^
+                        stageManager.ReinforcingStageExchangeCards();
+                        reinforcements = currentPlayer.armies;
+                        reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
+                    }
+
+                    reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
+                    reinforced = false;
+                    exchanged = false;
+                    yield return null;
+                }
+
+                foreach (GameObject button in buttons)
+                {
+
+                    Destroy(button);
+
+                }
+
+                // Attacking Stage
+
+                Vector3 playerCardPos = reinHUD.playerBackground.gameObject.transform.position;
+                GameObject playerCard = Instantiate(reinHUD.playerBackground.gameObject, playerCardPos, Quaternion.identity);
+                Vector3 messageBoxPos = reinHUD.messageBox.gameObject.transform.position;
+                GameObject messageBox = Instantiate(reinHUD.messageBox.gameObject, messageBoxPos, Quaternion.identity);
+                DestroyAllChildren(reinHUD.gameObject);
+
+                List<GameObject> attackerButtons = new List<GameObject>();
+                foreach (Country country in playerCountries)
+                {
+                    bool hasHostileNeighbour = false;
+                    foreach(Country connection in country.GetConnections())
+                    {
+                        if (country.GetPlayer() != connection.GetPlayer()) hasHostileNeighbour = true;
+                    }
+                    if (hasHostileNeighbour)
+                    {
+                        GameObject button = Instantiate(attackerButton, country.Sprite.transform);
+                        button.GetComponent<AttackingButton>().country = country;
+                        attackerButtons.Add(button);
+                    }
+                    
+                }
+
+                messageBox.GetComponent<TextMeshPro>().text = "Choose a Country as Attacker";
+
+                bool canFortify = false;
+                foreach(Country country in currentPlayer.countries)
+                {
+                    foreach (Country connection in country.GetConnections())
+                    {
+                        if (connection.GetPlayer() == country.GetPlayer()) canFortify = true;
+                    }
+                }
+                GameObject fButton = Instantiate(fortifyButton);
+                if (!canFortify) fButton.SetActive(false);
+                while (!attackerChosen && !skipAndFortify)
+                {
+                    yield return null;
+                }
+                if (attackerChosen)
+                {
+                    attackerChosen = false;
+                    DestroyAllChildren(fButton);
+
+                    foreach (GameObject button in attackerButtons)
+                    {
+
+                        Destroy(button);
+                    }
+
+                    List<Country> targets = new List<Country>();
+                    foreach (Country connection in attackingCountry.GetConnections())
+                    {
+                        if (connection.GetPlayer() != attackingCountry.GetPlayer())
+                        {
+                            targets.Add(connection);
+                        }
+                    }
+
+                    List<GameObject> defenderButtons = new List<GameObject>();
+                    foreach (Country country in targets)
+                    {
+                        GameObject button = Instantiate(targetButton, country.Sprite.transform);
+                        button.GetComponent<TargetButton>().country = country;
+                        defenderButtons.Add(button);
+                    }
+
+                    messageBox.GetComponent<TextMeshPro>().text = "Choose a Country as a Target";
+
+                    while (!defenderChosen)
+                    {
+                        yield return null;
+                    }
+                    defenderChosen = false;
+
+                    foreach (GameObject button in defenderButtons)
+                    {
+                        Destroy(button);
+                    }
+
+                    //Blitz in case no time to implement normal attacks
+                    int diceUsed = stageManager.AttackingStageBlitz(attackingCountry, defendingCountry, 3);
+                    Debug.Log(diceUsed);
+                    gameMap.UpdateCountryLabels();
+
+                    if (diceUsed == -1) // Attacker loss output value
+                    {
+                        messageBox.GetComponent<TextMeshPro>().text = "Blitz! You lost! Your turn ends!";
+
+                        yield return new WaitForSeconds(2);
+                        
+                    }
+                    else
+                    {
+                        messageBox.GetComponent<TextMeshPro>().text = "Blitz! You won! Deploy troops to your new Country!";
+                        GameObject vp = Instantiate(valuePicker);
+                        List<int> possibleValues = new List<int>();
+                        for (int i = diceUsed; i < attackingCountry.Armies(); i++)
+                        {
+                            possibleValues.Add(i);
+                        }
+                        int currentIndex = 0;
+                        TextMeshPro valueVisual = vp.GetComponentInChildren<TextMeshPro>();
+                        valueVisual.text = possibleValues[currentIndex].ToString();
+
+                        while (!fortified)
+                        {
+                            while (!incrementDown && !incrementUp && !fortified)
+                            {
+                                yield return null;
+                            }
+                            if (incrementDown)
+                            {
+                                incrementDown = false;
+                                if (currentIndex != 0) currentIndex--;
+                            }
+                            if (incrementUp)
+                            {
+                                incrementUp = false;
+                                if (currentIndex != possibleValues.Count - 1) currentIndex++;
+                            }
+                            valueVisual.text = possibleValues[currentIndex].ToString();
+                            yield return null;
+                        }
+                        fortified = false;
+
+                        DestroyAllChildren(vp);
+                        Debug.Log(defendingCountry.GetPlayer());
+                        attackingCountry.TransferArmies(possibleValues[currentIndex], defendingCountry);
+                        gameMap.UpdateCountryLabels();
+                        gameMap.ShowContinentPlayerControl();
+                    }
+                    currentPlayer.AddCard();
+                    DestroyAllChildren(messageBox);
+                    DestroyAllChildren(playerCard);
+                }
+                else if (skipAndFortify) // Fortify Stage
+                {
+                    skipAndFortify = false;
+                    DestroyAllChildren(fButton);
+                    foreach (GameObject button in attackerButtons)
+                    {
+
+                        Destroy(button);
+                    }
+
+                    messageBox.GetComponent<TextMeshPro>().text = "Choose a Country as a Donor";
+
+                    List<GameObject> countryOptions = new List<GameObject>();
+                    List<Country> fortificationConnections = new List<Country>();
+                    foreach (Country country in playerCountries)
+                    {
+                        bool hasFriendlyOnBorder = false;
+                        foreach (Country connection in country.GetConnections())
+                        {
+                            if (connection.GetPlayer() == country.GetPlayer()) hasFriendlyOnBorder = true;
+                        }
+                        if (hasFriendlyOnBorder) fortificationConnections.Add(country);
+                    }
+
+                    foreach (Country country in fortificationConnections)
+                    {
+                        GameObject button = Instantiate(attackerButton, country.Sprite.transform);
+                        button.GetComponent<AttackingButton>().country = country;
+                        countryOptions.Add(button);
+                    }
+
+                    while (!attackerChosen)
+                    {
+                        yield return null;
+                    }
+                    attackerChosen = false;
+
+
+                    foreach (GameObject button in countryOptions)
+                    {
+
+                        Destroy(button);
+                    }
+
+                    List<Country> fortTargets = new List<Country>();
+                    foreach (Country country in attackingCountry.GetConnections())
+                    {
+                        if (country.GetPlayer() == attackingCountry.GetPlayer()) fortTargets.Add(country);
+                    }
+
+                    List<GameObject> fortificationButtons = new List<GameObject>();
+                    foreach (Country country in fortTargets)
+                    {
+                        GameObject button = Instantiate(targetButton, country.Sprite.transform);
+                        button.GetComponent<TargetButton>().country = country;
+                        fortificationButtons.Add(button);
+                    }
+
+                    messageBox.GetComponent<TextMeshPro>().text = "Choose a Country as a Target";
+
+                    while (!defenderChosen)
+                    {
+                        yield return null;
+                    }
+                    defenderChosen = false;
+
+                    foreach (GameObject button in fortificationButtons)
+                    {
+                        Destroy(button);
+                    }
+
+                    GameObject vp = Instantiate(valuePicker);
+                    List<int> possibleValues = new List<int>();
+                    for (int i = 1; i < attackingCountry.Armies(); i++)
+                    {
+                        possibleValues.Add(i);
+                    }
+                    int currentIndex = 0;
+                    TextMeshPro valueVisual = vp.GetComponentInChildren<TextMeshPro>();
+                    valueVisual.text = possibleValues[currentIndex].ToString();
+
+                    while (!fortified)
+                    {
+                        while (!incrementDown && !incrementUp && !fortified)
+                        {
+                            yield return null;
+                        }
+                        if (incrementDown)
+                        {
+                            incrementDown = false;
+                            if (currentIndex != 0) currentIndex--;
+                        }
+                        if (incrementUp)
+                        {
+                            incrementUp = false;
+                            if (currentIndex != possibleValues.Count - 1) currentIndex++;
+                        }
+                        valueVisual.text = possibleValues[currentIndex].ToString();
+                        yield return null;
+                    }
+                    fortified = false;
+
+                    DestroyAllChildren(vp);
+
+                    attackingCountry.TransferArmies(possibleValues[currentIndex], defendingCountry);
+                    gameMap.UpdateCountryLabels();
+
+                    DestroyAllChildren(messageBox);
+                    DestroyAllChildren(playerCard);
+                }
             }
             
-            reinHUD.UpdateVisuals(currentPlayer.GetPlayerSlot(), currentPlayer.CardsAsVector(), currentPlayer.armies, gameMap.PlayerColors[currentPlayer.GetPlayerSlot()]);
-            reinforced = false;
-            exchanged = false;
+                
+            stageManager.ProgressTurns();
+
             yield return null;
         }
 
-        foreach (GameObject button in buttons)
-        {
-            
-            Destroy(button);
-
-        }
-
-        // Attacking Stage
-
-        GameObject playerCard = Instantiate(reinHUD.playerBackground.gameObject);
-        DestroyAllChildren(reinHUD.gameObject);
-
-        List<GameObject> attackerButtons = new List<GameObject>();
-        foreach (Country country in playerCountries)
-        {
-            GameObject button = Instantiate(attackerButton, country.Sprite.transform);
-            button.GetComponent<AttackingButton>().country = country;
-            attackerButtons.Add(button);
-        }
-
-        while (!attackerChosen)
-        {
-            yield return null;
-        }
-        attackerChosen = false;
 
         
-        foreach (GameObject button in attackerButtons)
-        {
-            
-            Destroy(button);
-        }
+        
 
-        List<Country> targets = new List<Country>();
-        foreach (Country connection in attackingCountry.GetConnections())
-        {
-            if(connection.GetPlayer() != attackingCountry.GetPlayer())
-            {
-                targets.Add(connection);
-            }
-        }
-
-        List<GameObject> defenderButtons = new List<GameObject>();
-        foreach (Country country in targets)
-        {
-            GameObject button = Instantiate(targetButton, country.Sprite.transform);
-            button.GetComponent<TargetButton>().country = country;
-            defenderButtons.Add(button);
-        }
-
-        while (!defenderChosen)
-        {
-            yield return null;
-        }
-        defenderChosen = false;
-
-        foreach (GameObject button in defenderButtons)
-        {
-
-            Destroy(button);
-        }
-
-        //Blitz in case no time to implement normal attacks
-        int diceUsed = stageManager.AttackingStageBlitz(attackingCountry, defendingCountry, 3);
-        Debug.Log(diceUsed);
-        gameMap.UpdateCountryLabels();
 
         yield return 0;
     }

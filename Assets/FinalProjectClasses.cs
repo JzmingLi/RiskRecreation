@@ -237,7 +237,7 @@ namespace RiskRecreation
 
     public class Map
     {
-        List<Country> countries;
+        public List<Country> countries;
         List<Continent> continents;
 
         public List<GameObject> continentSprites;
@@ -316,6 +316,12 @@ namespace RiskRecreation
                     GameObject continentSprite = continentSprites[continents.IndexOf(continent)];
                     continentSprite.GetComponent<SpriteRenderer>().color = playerColor;
                 }
+                else
+                {
+                    Color defaultColor = PlayerColors[PlayerSlot.Unoccupied];
+                    GameObject continentSprite = continentSprites[continents.IndexOf(continent)];
+                    continentSprite.GetComponent<SpriteRenderer>().color = defaultColor;
+                }
             }
         }
 
@@ -379,7 +385,7 @@ namespace RiskRecreation
         private PlayerSlot playerSlot;
         public List<Country> countries;
         public int armies; // Should be 0 at the end of a turn
-        private int exchangeCounter; //Should be 0 at the start of every turn
+        private int exchangeCounter; //Should be 1 at the start of every turn
         private int InfantryCards;
         private int ArtilleryCards;
         private int CavalryCards;
@@ -388,7 +394,7 @@ namespace RiskRecreation
         {
             this.countries = countries;
             armies = 0;
-            exchangeCounter = 0;
+            exchangeCounter = 1;
             InfantryCards = 0;
             ArtilleryCards = 0;
             CavalryCards = 0;
@@ -534,6 +540,24 @@ namespace RiskRecreation
             }
         }
 
+        public void AddCard()
+        {
+            int random = Random.Range(0, 3);
+            switch (random)
+            {
+                case 0:
+                    InfantryCards++;
+                    break;
+                case 1:
+                    CavalryCards++;
+                    break;
+                case 2:
+                    ArtilleryCards++;
+                    break;
+            }
+        }
+
+
         public void RemoveCard(Card card)
         {
             switch (card)
@@ -548,6 +572,21 @@ namespace RiskRecreation
                     ArtilleryCards--;
                     break;
             }
+        }
+
+        public void ExchangeOneOfEachCard()
+        {
+            InfantryCards--;
+            CavalryCards--;
+            ArtilleryCards--;
+            armies += 5 * exchangeCounter;
+            exchangeCounter++;
+        }
+
+
+        public int CardCount()
+        {
+            return InfantryCards + CavalryCards + ArtilleryCards;
         }
 
         public void AddTroopsToCountry(Country country, int troops)
@@ -565,7 +604,7 @@ namespace RiskRecreation
 
         public void ResetExchangeCounter()
         {
-            exchangeCounter = 0;
+            exchangeCounter = 1;
         }
     }
 
@@ -591,6 +630,7 @@ namespace RiskRecreation
                     // Make list of countries for player and add starting country
                     List<Country> newPlayerCountryList = new List<Country>();
                     Country startingCountry = map.GetStartingCountry();
+                    startingCountry.AddArmies(1);
                     newPlayerCountryList.Add(startingCountry);
 
                     // Add player to list
@@ -606,6 +646,7 @@ namespace RiskRecreation
                         if (map.CheckForUnoccupiedCountries())
                         {
                             Country country = map.GetStartingCountry();
+                            country.AddArmies(1);
                             playerList[i].AddCountry(country);
                             Debug.Log(country.GetPlayer());
                         }
@@ -646,9 +687,13 @@ namespace RiskRecreation
             currentTurnPlayer.SetArmies(initialArmies);
         }
 
-        public void ReinforcingStageExchangeCards()
+        public void CheckCards()
         {
             currentTurnPlayer.ResetExchangeCounter();
+            if (currentTurnPlayer.CardCount() >= 5) currentTurnPlayer.ExchangeOneOfEachCard();
+        }
+        public void ReinforcingStageExchangeCards()
+        {
             Vector3 playerCards = currentTurnPlayer.CardsAsVector();
             while(playerCards.x >= 3)
             {
@@ -662,7 +707,9 @@ namespace RiskRecreation
             {
                 playerCards.z = currentTurnPlayer.ExchangeCards(Card.Cavalry);
             }
+            
         }
+
 
         public void ReinforcingStageReinforceArmies(Country country, int amount)
         {
@@ -705,33 +752,45 @@ namespace RiskRecreation
         public int AttackingStageBlitz(Country attacker, Country target, int dice)
         {
             int diceUsed = 0;
-            while (attacker.Armies() > 0 || target.Armies() > 0)
+            while (attacker.Armies() > 1 && target.Armies() > 0)
             {
                 diceUsed = 0;
                 int attackerRoll = 0;
                 for (int i = 0; i < 3; i++) // Roll up to 3 dice for every army
                 {
-                    if (i < attacker.Armies()) break;
-                    attackerRoll += Random.Range(1, 7);
+                    if (i > attacker.Armies()-2) break;
+                    int roll = Random.Range(1, 7);
+                    if(attackerRoll < roll) attackerRoll = roll;
                     diceUsed += 1;
+                    Debug.Log(attackerRoll);
                 }
                 int targetRoll = 0;
                 for (int i = 0; i < 2; i++) // Roll up to 2 dice for every army
                 {
-                    if (i < target.Armies()) break;
-                    targetRoll += Random.Range(1, 7);
+                    if (i > target.Armies()-1) break;
+                    int roll = Random.Range(1, 7);
+                    if (targetRoll < roll) targetRoll = roll;
+                    Debug.Log(targetRoll);
                 }
                 if (attackerRoll > targetRoll) // If attacker rolls higher target loses one army
                 {
                     target.SubtractArmies(1);
+                    Debug.Log("attacker won");
                 }
                 if (attackerRoll <= targetRoll) // If attacker rolls less or equal to target they lose one army
                 {
                     attacker.SubtractArmies(1);
+                    Debug.Log("defender won");
                 }
             }
-            if (target.Armies() == 0) target.SetPlayer(currentTurnPlayer.GetPlayerSlot());
+            if (target.Armies() == 0) {
 
+                target.SetPlayer(currentTurnPlayer.GetPlayerSlot());
+                GetPlayer(target.GetPlayer()).RemoveCountry(target);
+                currentTurnPlayer.AddCountry(target);
+            }
+
+            else diceUsed = -1; // To tell if attacker lost;
             return diceUsed; // To determine the minimum amount of armies the player must deploy
         }
 
@@ -750,6 +809,56 @@ namespace RiskRecreation
                 index = 0;
             }
             currentTurnPlayer = playerList[index];
+        }
+
+        public Player GetPlayer(PlayerSlot slot)
+        {
+            switch (slot)
+            {
+                case PlayerSlot.Player1: return playerList[0];
+                case PlayerSlot.Player2: return playerList[1];
+                case PlayerSlot.Player3: return playerList[2];
+                case PlayerSlot.Player4: return playerList[3];
+                default:
+                    Debug.Log("Player lot not in range");
+                    return null;
+            }
+        }
+
+        public bool CheckPlayersAlive()
+        {
+            int alivePlayers = 0;
+            foreach(Player player in playerList)
+            {
+                if (player.GetCountryCount() > 0)
+                {
+                    alivePlayers++;
+                }
+            }
+
+            return alivePlayers > 1;
+        }
+
+        public bool CheckPlayerStatus()
+        {
+            return currentTurnPlayer.GetCountryCount() > 0;
+        }
+
+        public void FixPlayerCountryList(Map map)
+        {
+            foreach(Player player in playerList)
+            {
+                player.countries.Clear();
+                foreach(Country country in map.countries)
+                {
+                    if(country.GetPlayer() == currentTurnPlayer.GetPlayerSlot())
+                    {
+                        player.countries.Add(country);
+                    }
+                }
+            }
+            map.UpdateCountryLabels();
+            map.ShowContinentPlayerControl();
         }
     }
 }
