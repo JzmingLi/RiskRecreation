@@ -243,14 +243,16 @@ namespace RiskRecreation
         public List<GameObject> continentSprites;
         public List<GameObject> countrySprites;
         
-        public Map(List<Country> countries, List<Continent> continents)
+        public Map(List<Country> setCountries, List<Continent> setContinents)
         {
-            this.countries = countries;
-            this.continents = continents;
+            countries= setCountries;
+            continents = setContinents;
+
+            continentSprites = new List<GameObject>();
+            countrySprites = new List<GameObject>();
 
             foreach(Country country in countries)
             {
-                Debug.Log(country.Sprite);
                 countrySprites.Add(country.Sprite);
             }
             foreach(Continent continent in continents)
@@ -259,7 +261,7 @@ namespace RiskRecreation
             }
         }
 
-        private Dictionary<PlayerSlot, Color> PlayerColors = new Dictionary<PlayerSlot, Color>(); // Determine player colours
+        public Dictionary<PlayerSlot, Color> PlayerColors = new Dictionary<PlayerSlot, Color>(); // Determine player colours
 
         public void ChoosePlayerColors(Color player1, Color player2, Color player3, Color player4, Color unoccupied) // Called by main to assign player colors
         {
@@ -320,7 +322,7 @@ namespace RiskRecreation
         // Initial Stage Stuff
         public Country GetRandomCountry()
         {
-            int countryNumber = Random.Range(0, countries.Count - 1);
+            int countryNumber = Random.Range(0, countries.Count);
             return countries[countryNumber];
         }
 
@@ -340,14 +342,21 @@ namespace RiskRecreation
         public Country GetStartingCountry()
         {
             Country startingCountry = GetRandomCountry();
-            if (CheckForUnoccupiedCountries())
+            while (CheckForUnoccupiedCountries())
             {
-                while (startingCountry.GetPlayer() != PlayerSlot.Unoccupied)
+                if (startingCountry.GetPlayer() != PlayerSlot.Unoccupied)
                 {
+                    Debug.Log("Country Occupied");
                     startingCountry = GetRandomCountry();
                 }
+                else
+                {
+                    Debug.Log("Country Unoccupied");
+                     return startingCountry;
+                 }
+    
             }
-            return startingCountry;
+            return null;
         }
 
         //Reinforcing Stage Stuff
@@ -368,8 +377,8 @@ namespace RiskRecreation
     public class Player
     {
         private PlayerSlot playerSlot;
-        private List<Country> countries;
-        private int armies; // Should be 0 at the end of a turn
+        public List<Country> countries;
+        public int armies; // Should be 0 at the end of a turn
         private int exchangeCounter; //Should be 0 at the start of every turn
         private int InfantryCards;
         private int ArtilleryCards;
@@ -422,6 +431,11 @@ namespace RiskRecreation
             return countries.Count;
         }
 
+        public Country GetRandomCountry()
+        {
+            return countries[Random.Range(0, GetCountryCount())];
+        }
+
         // Armies, not all functions necessary but do exactly as they are supposed to
         // In main, the armies will be added and then the player will subtract armies to reinforce countries
         public bool CheckArmiesDepleted()
@@ -458,7 +472,7 @@ namespace RiskRecreation
         }
 
         //Use cards to get armies
-        public void ExchangeCards(Card card) // Will take 3 from the card type so check the amount of cards before running this method!!
+        public int ExchangeCards(Card card) // Will take 3 from the card type so check the amount of cards before running this method!!
         {
             switch (card)
             {
@@ -466,20 +480,24 @@ namespace RiskRecreation
                     InfantryCards -= 3;
                     armies += 5 * exchangeCounter;
                     exchangeCounter++;
-                    break;
+                    return InfantryCards;
+
                 case Card.Cavalry:
                     CavalryCards -= 3;
                     armies += 5 * exchangeCounter;
                     exchangeCounter++;
-                    break;
+                    return CavalryCards;
+
                 case Card.Artillery:
                     ArtilleryCards -= 3;
                     armies += 5 * exchangeCounter;
                     exchangeCounter++;
-                    break;
+                    return ArtilleryCards;
+
                 default:
                     Debug.Log("Invalid card type.");
-                    break;
+                    return 0;
+
             }
 
             
@@ -554,7 +572,7 @@ namespace RiskRecreation
     public class StageManager
     {
         List<Player> playerList;
-        Player currentTurnPlayer;
+        public Player currentTurnPlayer;
         Map map;
 
         public StageManager(int numberOfPlayers, Map map) // Initial Stage
@@ -567,15 +585,47 @@ namespace RiskRecreation
             else
             {
                 playerList = new List<Player>(); // Initialize player list
+
                 for (int i = 0; i < numberOfPlayers; i++)
                 {
                     // Make list of countries for player and add starting country
                     List<Country> newPlayerCountryList = new List<Country>();
-                    newPlayerCountryList.Add(map.GetStartingCountry());
+                    Country startingCountry = map.GetStartingCountry();
+                    newPlayerCountryList.Add(startingCountry);
+
                     // Add player to list
                     Player player = new Player(newPlayerCountryList, i);
                     playerList.Add(player);
+                    startingCountry.SetPlayer(player.GetPlayerSlot()); //Set country to playerslot
                 }
+
+                while (map.CheckForUnoccupiedCountries()) // Keep adding countries to players until no countries unoccupied
+                {
+                    for (int i = 0; i < playerList.Count; i++)
+                    {
+                        if (map.CheckForUnoccupiedCountries())
+                        {
+                            Country country = map.GetStartingCountry();
+                            playerList[i].AddCountry(country);
+                            Debug.Log(country.GetPlayer());
+                        }
+                    }
+                }
+
+                
+                for (int i = 0; i < playerList.Count; i++) // keep adding troops to players until 35
+                {
+                    Player player = playerList[i];
+
+                    while (player.GetTotalArmies() < 35)
+                    {
+                        player.AddTroopsToCountry(player.GetRandomCountry(), 1);
+                    }
+                    Debug.Log(player.GetTotalArmies());
+                }
+
+
+                
                 currentTurnPlayer = playerList[0]; //Set the turn to player 1
             }
         }
@@ -591,7 +641,7 @@ namespace RiskRecreation
             
             int initialArmies = armiesFromCountry + armiesFromContinent; // Total
 
-            if (initialArmies == 0) initialArmies = 1; // if 0 make 1
+            if (initialArmies < 3) initialArmies = 3; // minimum 3
 
             currentTurnPlayer.SetArmies(initialArmies);
         }
@@ -602,15 +652,15 @@ namespace RiskRecreation
             Vector3 playerCards = currentTurnPlayer.CardsAsVector();
             while(playerCards.x >= 3)
             {
-                currentTurnPlayer.ExchangeCards(Card.Infantry);
+                playerCards.x = currentTurnPlayer.ExchangeCards(Card.Infantry);
             }
             while(playerCards.y >= 3)
             {
-                currentTurnPlayer.ExchangeCards(Card.Artillery);
+                playerCards.y = currentTurnPlayer.ExchangeCards(Card.Artillery);
             }
             while(playerCards.z >= 3)
             {
-                currentTurnPlayer.ExchangeCards(Card.Cavalry);
+                playerCards.z = currentTurnPlayer.ExchangeCards(Card.Cavalry);
             }
         }
 
@@ -639,6 +689,39 @@ namespace RiskRecreation
                     targetRoll += Random.Range(1, 7);
                 }
                 if(attackerRoll > targetRoll) // If attacker rolls higher target loses one army
+                {
+                    target.SubtractArmies(1);
+                }
+                if (attackerRoll <= targetRoll) // If attacker rolls less or equal to target they lose one army
+                {
+                    attacker.SubtractArmies(1);
+                }
+            }
+            if (target.Armies() == 0) target.SetPlayer(currentTurnPlayer.GetPlayerSlot());
+
+            return diceUsed; // To determine the minimum amount of armies the player must deploy
+        }
+
+        public int AttackingStageBlitz(Country attacker, Country target, int dice)
+        {
+            int diceUsed = 0;
+            while (attacker.Armies() > 0 || target.Armies() > 0)
+            {
+                diceUsed = 0;
+                int attackerRoll = 0;
+                for (int i = 0; i < 3; i++) // Roll up to 3 dice for every army
+                {
+                    if (i < attacker.Armies()) break;
+                    attackerRoll += Random.Range(1, 7);
+                    diceUsed += 1;
+                }
+                int targetRoll = 0;
+                for (int i = 0; i < 2; i++) // Roll up to 2 dice for every army
+                {
+                    if (i < target.Armies()) break;
+                    targetRoll += Random.Range(1, 7);
+                }
+                if (attackerRoll > targetRoll) // If attacker rolls higher target loses one army
                 {
                     target.SubtractArmies(1);
                 }

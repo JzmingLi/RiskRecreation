@@ -2334,7 +2334,7 @@ Camera:
   far clip plane: 1000
   field of view: 60
   orthographic: 1
-  orthographic size: 5
+  orthographic size: 7.24
   m_Depth: -1
   m_CullingMask:
     serializedVersion: 2
@@ -2359,7 +2359,7 @@ Transform:
   m_GameObject: {fileID: 519420028}
   serializedVersion: 2
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 0, y: 0, z: -10}
+  m_LocalPosition: {x: -0.28, y: -1.71, z: -10}
   m_LocalScale: {x: 1, y: 1, z: 1}
   m_ConstrainProportionsScale: 0
   m_Children: []
@@ -3979,6 +3979,18 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   text: {fileID: 6079832096917513694, guid: 143b18dba35491f4cadcdb8bbe61c536, type: 3}
+  playerSelectionVisuals: {fileID: 6325321574109407228, guid: fc84bc08ee00d9945b25fcd17c0079b8, type: 3}
+  reinforcingStageHUD: {fileID: 235392606606581137, guid: 31b0d973d60f10449aba307904efe8c2, type: 3}
+  playerCount: 0
+  reinforcements: 0
+  reinforceButton: {fileID: 5657894065973035400, guid: c712b4b9bf0c9934a961e1152e4bce7b, type: 3}
+  reinforced: 0
+  exchanged: 0
+  attackerButton: {fileID: 5657894065973035400, guid: bc80828b9b14a7c478d9f3012aef154b, type: 3}
+  targetButton: {fileID: 5657894065973035400, guid: b9b029c522f257b41a4961bc233a121c, type: 3}
+  attackerChosen: 0
+  defenderChosen: 0
+  attacking: 0
 --- !u!1 &1187031007
 GameObject:
   m_ObjectHideFlags: 0
