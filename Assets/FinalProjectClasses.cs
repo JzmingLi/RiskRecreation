@@ -860,5 +860,17 @@ namespace RiskRecreation
             map.UpdateCountryLabels();
             map.ShowContinentPlayerControl();
         }
+
+        public Player FindLastPlayer()
+        {
+            foreach (Player player in playerList)
+            {
+                if(player.countries.Count == 26)
+                {
+                    return player;
+                }
+            }
+            return null;
+        }
     }
 }

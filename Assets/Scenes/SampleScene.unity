@@ -3997,6 +3997,7 @@ MonoBehaviour:
   valuePicker: {fileID: 8840606282507537509, guid: 07b76fea4249c5a438d5e3e1170f7016, type: 3}
   skipAndFortify: 0
   fortifyButton: {fileID: 7390538316757237070, guid: 4d944a7d867ebd545930e7a86e4c3852, type: 3}
+  gameEnd: {fileID: 5175693095618777238, guid: 8a858c5745198514c9a9e94378e8a4d2, type: 3}
 --- !u!1 &1187031007
 GameObject:
   m_ObjectHideFlags: 0

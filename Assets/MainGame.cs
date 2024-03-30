@@ -33,6 +33,7 @@ public class MainGame : MonoBehaviour
     public GameObject valuePicker;
     public bool skipAndFortify;
     public GameObject fortifyButton;
+    public GameObject gameEnd;
 
 
     void DestroyAllChildren(GameObject target)
@@ -573,10 +574,11 @@ public class MainGame : MonoBehaviour
                 
             stageManager.ProgressTurns();
 
-            yield return null;
+            //yield return null;
         }
 
-
+        GameObject endScreen = Instantiate(gameEnd);
+        endScreen.GetComponent<TextMeshPro>().text = stageManager.FindLastPlayer().GetPlayerSlot().ToString() + " WINS!";
         
         
 
